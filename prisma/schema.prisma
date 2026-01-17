@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+
+  // PayPal API Credentials
+  paypalConnected    Boolean   @default(false)
+  paypalEmail        String?
+  paypalClientId     String?
+  paypalClientSecret String?
+  paypalMode         String?   // "sandbox" or "live"
+
+  recipients Recipient[]
+  schedules  Schedule[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Recipient {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  email         String
+  name          String
+  defaultAmount Decimal?
+  status        String   @default("active")
+
+  scheduleItems ScheduleRecipient[]
+  transactions  Transaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Schedule {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  frequency   String   // one_time, weekly, bi_weekly, monthly, custom
+  customDays  Int?
+  status      String   @default("active") // active, paused, completed, cancelled
+
+  startDate   DateTime
+  nextRunDate DateTime?
+  lastRunDate DateTime?
+  endDate     DateTime?
+
+  recipients   ScheduleRecipient[]
+  transactions Transaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status, nextRunDate])
+}
+
+model ScheduleRecipient {
+  id          String    @id @default(cuid())
+  scheduleId  String
+  schedule    Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  amount Decimal
+  note   String?
+
+  @@unique([scheduleId, recipientId])
+  @@index([scheduleId])
+  @@index([recipientId])
+}
+
+model Transaction {
+  id          String    @id @default(cuid())
+  scheduleId  String
+  schedule    Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  amount   Decimal
+  currency String  @default("USD")
+  status   String  @default("pending") // pending, processing, completed, failed
+
+  paypalBatchId String?
+  paypalItemId  String?
+  errorMessage  String?
+
+  processedAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([scheduleId])
+  @@index([recipientId])
+  @@index([status])
+  @@index([createdAt])
+}
